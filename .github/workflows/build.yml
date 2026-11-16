@@ -2,10 +2,15 @@ name: build
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.toolchain == 'beta' || matrix.toolchain == 'nightly' }}
     strategy:
+      fail-fast: false
       matrix:
         os:
           [
@@ -17,49 +22,51 @@ jobs:
             macos-15,
             macos-14,
           ]
-        toolchain: [stable, beta, nightly]
+        toolchain: [stable]
+        include:
+          - os: ubuntu-24.04
+            toolchain: beta
+          - os: ubuntu-24.04
+            toolchain: nightly
+          # MSRV, keep in sync with rust-version in Cargo.toml
+          - os: ubuntu-24.04
+            toolchain: "1.59"
     steps:
-      - name: Install latest nightly
-        uses: actions-rs/toolchain@v1
+      - name: Checkout sources
+        uses: actions/checkout@v7
+      - name: Install ${{ matrix.toolchain }} toolchain
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
-          override: true
-      - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
       - name: Build
         run: cargo build --verbose
-        continue-on-error: ${{ matrix.toolchain != 'stable' }}
       - name: Run tests
         run: cargo test --verbose
-        continue-on-error: ${{ matrix.toolchain != 'stable' }}
 
   clippy:
     name: clippy (ubuntu-latest, stable)
     runs-on: ubuntu-latest
     steps:
-      - name: Install latest stable
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: clippy
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Cargo Clippy
-        run: cargo clippy -- -D warnings -A deprecated
+        run: cargo clippy -- -D warnings
 
   fmt:
     name: fmt (ubuntu-latest, stable)
     runs-on: ubuntu-latest
     steps:
-      - name: Install latest stable
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          components: rustfmt
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
       - name: Check Formatting
         run: cargo fmt --all -- --check
